@@ -1,0 +1,42 @@
+#************************
+# Deploy VM via ARM
+# Author:@DaveRndn
+# http://wikiazure.com
+#***********************
+
+
+$Location = "West US"
+$ResourceGroupName = "TestDeployARM"
+$SubnetName = "Subnet-1"
+$TestName = "testdeployarm1"
+$VnetName = "VnetTestDeployARM"
+$Publisher = "MicrosoftWindowsServer"
+$Offer = "WindowsServer"
+$Sku = "2012-R2-Datacenter"
+$Version = "latest"
+
+
+New-AzureRmResourceGroup -Name $ResourceGroupName -Location $Location
+
+New-AzureRmStorageAccount -ResourceGroupName $ResourceGroupName -Name $TestName -Location $Location -Type Standard_LRS
+
+$Subnet = New-AzureRmVirtualNetworkSubnetConfig -Name $SubnetName -AddressPrefix "10.0.64.0/24"
+
+$Vnet = New-AzureRmVirtualNetwork -Name $VnetName -ResourceGroupName $ResourceGroupName -Location $Location -AddressPrefix "10.0.0.0/16" -Subnet $Subnet
+
+$Subnet = Get-AzureRmVirtualNetworkSubnetConfig -Name $SubnetName -VirtualNetwork $Vnet
+
+
+$PublicIpAdress = New-AzureRmPublicIpAddress -ResourceGroupName $ResourceGroupName -Name "VipTstARM" -Location $Location -AllocationMethod Dynamic -DomainNameLabel $TestName
+
+$Nic = New-AzureRmNetworkInterface -ResourceGroupName $ResourceGroupName -Name "Nic1tst" -Subnet $Subnet -Location $Location -PublicIpAddress $PublicIpAdress -PrivateIpAddress "10.0.64.4"
+
+$Cred = Get-Credential
+
+$VmConfig = New-AzureRmVMConfig -VMName "VM1" -VMSize "Standard_A1"  | 
+            Set-AzureRmVMOperatingSystem -Windows -ComputerName "VM1" -Credential $Cred -ProvisionVMAgent -EnableAutoUpdate |
+            Set-AzureRmVMSourceImage -PublisherName $Publisher -Offer $Offer -Skus $Sku -Version $Version |
+            Set-AzureRmVMOSDisk -Name "$TestName-v1" -VhdUri "https://testdeployarm1.blob.core.windows.net/vhd/$TestName-v1.vhd" -Caching ReadWrite -CreateOption fromImage |
+            Add-AzureRmVMNetworkInterface -Id $Nic.Id
+
+New-AzureRmVM -ResourceGroupName $ResourceGroupName -Location $Location -VM $VmConfig
